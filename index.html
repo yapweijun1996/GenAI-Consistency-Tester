@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gemini Consistency Tester — Vanilla JS</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js`;</script>
+  <style>
+    :root { --fg:#111; --bg:#fff; --muted:#6b7280; --border:#e5e7eb; --accent:#2563eb; --ok:#16a34a; --warn:#d97706; --err:#dc2626; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"; color:var(--fg); background:var(--bg); }
+    header { padding:16px; border-bottom:1px solid var(--border); position:sticky; top:0; background:rgba(255,255,255,.9); backdrop-filter:saturate(180%) blur(6px); }
+    header h1 { margin:0; font-size:18px; font-weight:700; }
+    .container { max-width:1000px; margin:0 auto; padding:16px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    @media (max-width: 800px){ .grid { grid-template-columns: 1fr; } }
+    .card { border:1px solid var(--border); border-radius:14px; padding:14px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.03); }
+    h2.card-title { font-size: 14px; font-weight: 700; margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    label { display:block; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-bottom:6px; }
+    input[type="text"], textarea, select { width:100%; border:1px solid var(--border); border-radius:10px; padding:10px 12px; font:inherit; outline:none; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+    textarea { min-height:120px; resize:vertical; }
+    input[type="file"] { width:100%; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap: wrap; }
+    .row > * { flex:1; min-width: 180px; }
+    .btn { appearance:none; border:1px solid var(--border); padding:10px 14px; border-radius:999px; background:#fff; cursor:pointer; font-weight:600; }
+    .btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn.ghost { background:#fff; }
+    .btn:disabled { opacity:.6; cursor:not-allowed; }
+    .muted { color:var(--muted); }
+    .thin { font-weight:500; }
+    .progress-wrap { height:10px; background:#f5f7fb; border:1px solid var(--border); border-radius:999px; overflow:hidden; }
+    .progress { height:100%; width:0%; background:linear-gradient(90deg, var(--accent), #4f46e5); transition:width .25s ease; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--border); vertical-align: top; }
+    th { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--border); }
+    .badge.ok{ color:var(--ok); border-color:rgba(22,163,74,.25); background:rgba(22,163,74,.06); }
+    .badge.err{ color:var(--err); border-color:rgba(220,38,38,.25); background:rgba(220,38,38,.06); }
+    .badge.warn{ color:var(--warn); border-color:rgba(217,119,6,.25); background:rgba(217,119,6,.06); }
+    .pill { font-variant-numeric: tabular-nums; font-weight:700; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    details summary { cursor:pointer; user-select:none; }
+    .footer { margin-top: 8px; font-size: 12px; color: var(--muted); }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .kbd { padding: 2px 6px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px; background: #f9fafb; font-family: ui-monospace, monospace; font-size: 12px; }
+    .output-link { cursor: pointer; text-decoration: underline; color: var(--accent); }
+    .image-preview-container { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+    .img-preview { position: relative; text-align: center; }
+    .img-preview img { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); cursor: pointer; }
+    .img-preview .info { font-size: 10px; color: var(--muted); margin-top: 4px; }
+    .img-preview .delete-btn { position: absolute; top: -5px; right: -5px; width: 20px; height: 20px; background: var(--err); color: white; border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; }
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 1000; }
+    .modal { background: #fff; padding: 20px; border-radius: 14px; max-width: 80vw; max-height: 80vh; overflow-y: auto; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+    .modal-content img { max-width: 100%; max-height: 70vh; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 10px; }
+    .modal-header h3 { margin: 0; }
+    .modal-close { cursor: pointer; border: none; background: none; font-size: 24px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Gemini Consistency Tester <span class="muted thin">· Vanilla HTML/CSS/JS</span></h1>
+  </header>
+  <div class="container">
+    <div class="grid">
+      <section class="card">
+        <h2 class="card-title">Configuration</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;">
+          
+          <div>
+            <label>Gemini API Key</label>
+            <input id="apiKey" type="text" placeholder="AIza... (stored in IndexedDB)" autocomplete="off" />
+            <div class="hint">Your key is stored locally and never sent anywhere except to Google APIs.</div>
+          </div>
+
+          <div>
+            <label>Model</label>
+            <select id="model">
+              <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option><!-- Gemini Latest Model -->
+              <option value="gemini-2.5-flash">gemini-2.5-flash</option><!-- Gemini Latest Model -->
+              <option value="gemma-3-27b-it">gemma-3-27b-it</option><!-- Gemini Latest Model -->
+            </select>
+          </div>
+
+          <div>
+            <label>Runs (N)</label>
+            <select id="runs">
+              <option>3</option> <option>5</option> <option selected>10</option> <option>15</option> <option>20</option>
+            </select>
+          </div>
+
+          <div>
+            <label>Delay (ms)</label>
+            <input id="delayMs" type="text" value="250" />
+          </div>
+
+          <div>
+            <label>Timeout (ms)</label>
+            <input id="timeoutMs" type="text" value="15000" />
+          </div>
+        </div>
+
+        <h2 class="card-title" style="margin-top: 20px;">Generation Config</h2>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+          <div>
+            <label>Temperature: <span id="temperatureVal" class="mono">0.0</span></label>
+            <input id="temperature" type="range" min="0" max="1" step="0.05" value="0.0" />
+            <div class="hint">Controls randomness. <span class="kbd">0.0</span> for deterministic, <span class="kbd">1.0</span> for creative.</div>
+          </div>
+          <div>
+            <label>Top-P: <span id="topPVal" class="mono">0.90</span></label>
+            <input id="topP" type="range" min="0" max="1" step="0.01" value="0.9" />
+            <div class="hint">Limits token selection from a probability distribution. Higher values are more diverse.</div>
+          </div>
+        </div>
+
+        <h2 class="card-title" style="margin-top: 20px;">Task Definition</h2>
+        <div>
+          <label>Load Template</label>
+          <select id="templateSelector"></select>
+        </div>
+        <div style="margin-top: 12px;">
+          <label>Prompt</label>
+          <textarea id="prompt" placeholder="Describe the task here. Keep it deterministic for better consistency (e.g., avoid open-ended creativity).">You are a helpful assistant. A user wants to know the capital of France.
+
+Respond in a JSON object with one key: "capital".</textarea>
+        </div>
+        <div class="hint">A clear, deterministic prompt is the most important factor for consistency.</div>
+        <div style="margin-top:10px;">
+          <label>Images or PDF</label>
+          <input id="images" type="file" accept="image/*,application/pdf" multiple />
+          <div id="imagePreviewContainer" class="image-preview-container"></div>
+          <div class="hint">Images are sent as inline base64 data. Large files increase latency; prefer ≤ 2MB each.</div>
+        </div>
+        <div class="row" style="margin-top:14px;">
+          <button class="btn primary" id="runBtn">Run Consistency Test</button>
+          <button class="btn ghost" id="cancelBtn" disabled>Cancel</button>
+          <button class="btn ghost" id="exportBtn" disabled>Export JSON</button>
+        </div>
+        <div style="margin-top:12px;">
+          <div class="progress-wrap"><div class="progress" id="progressBar"></div></div>
+          <div class="hint"><span id="statusText">Idle.</span></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="row">
+          <div>
+            <label>Consistency Rate (Exact Match)</label>
+            <div id="rateExact" class="pill" style="font-size:28px;">–</div>
+            <div class="hint">(Most common normalized response ÷ N)</div>
+          </div>
+          <div>
+            <label>Similarity vs. Majority (Token Jaccard)</label>
+            <div id="rateJaccard" class="pill" style="font-size:28px;">–</div>
+            <div class="hint">(Average word-set overlap vs. the majority response)</div>
+          </div>
+        </div>
+        <div style="margin-top:14px;">
+          <label>Majority Response (normalized)</label>
+          <pre id="majorityText" class="mono" style="white-space: pre-wrap; word-break: break-word; border:1px solid var(--border); border-radius:10px; padding:10px; max-height:220px; overflow:auto;">–</pre>
+        </div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:16px;">
+      <div class="row" style="align-items: baseline;">
+        <h3 style="margin:0; font-size:16px;">Runs</h3>
+        <span class="muted">Each request is sent sequentially with the same prompt & images.</span>
+      </div>
+      <div style="margin-top:10px; overflow:auto;">
+        <table id="resultsTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Status</th>
+              <th>Latency (ms)</th>
+              <th>Output (truncated)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="footer">Tip: To encourage consistency, keep prompts specific, avoid randomness, and include constraints (e.g., "Reply with a single JSON object with fixed keys.")</div>
+    </section>
+
+    <details class="card" style="margin-top:16px;">
+      <summary>How the consistency scores are computed</summary>
+      <ol>
+        <li><b>Exact Match:</b> Normalize each response (lowercase, trim, collapse whitespace). Find the most frequent string. Consistency = frequency_of_mode ÷ N.</li>
+        <li><b>Token Jaccard:</b> Tokenize responses into lowercased word sets. Take the majority response (mode) and compute Jaccard similarity <span class="mono">|A∩B| / |A∪B|</span> with every other response, then average.</li>
+      </ol>
+    </details>
+  </div>
+
+  <div class="modal-overlay" id="outputModalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalTitle">Full Output</h3>
+        <button class="modal-close" id="modalCloseBtn">&times;</button>
+      </div>
+      <div class="modal-content" id="modalContent">
+        <pre class="mono" style="white-space: pre-wrap; word-break: break-word;"></pre>
+        <img src="" alt="Image Preview" style="display:none;" />
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="folder_javascript/main.js"></script>
+</body>
+</html>
